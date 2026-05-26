@@ -17,14 +17,12 @@
 
 ## 快速开始
 
+详细步骤见 **[INSTALL.md](./INSTALL.md)**（含 Python 安装、PyTorch、模型下载、排错）。
+
 ```powershell
-cd voice_assistant
+cd python_lessson_exp
 powershell -ExecutionPolicy Bypass -File .\setup_tts_env.ps1
-```
-
-模型需单独下载到 `asset/` 目录，详见 `setup_tts_env.ps1` 或课设文档。
-
-```powershell
+# 按 INSTALL.md 第 6 节下载模型到 asset/
 .\.venv\Scripts\Activate.ps1
 python main.py
 ```
@@ -40,6 +38,7 @@ voice_assistant/
 ├── db.py             # 数据库
 ├── tts_core.py       # ChatTTS 封装
 ├── schema.sql        # 建表脚本
-├── setup_tts_env.ps1 # 环境安装脚本
+├── setup_tts_env.ps1 # 环境一键安装脚本
+├── INSTALL.md        # 详细安装文档
 └── ui/               # 界面
 ```
