@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ChatTTS models (download locally, ~1GB)
+asset/
+
+# Runtime data
+data/
+logs/
+*.db
+
+# Generated audio
+*.wav
+
+# IDE / OS
+.vscode/
+.idea/
+.cursor/
+Thumbs.db
+Desktop.ini
+
+# Env
+.env
+.env.*
