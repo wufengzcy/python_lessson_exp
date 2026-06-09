@@ -5,7 +5,8 @@
 ## 功能
 
 - 用户登录 / 注册
-- 文本转语音合成、播放、导出
+- 文本转语音合成、播放、导出（**ChatTTS** + **GPT-SoVITS 声线克隆**）
+- 用户录制/导入参考音频，零样本克隆或本地微调训练
 - 合成历史记录与搜索
 - 管理员后台（用户、记录、操作日志）
 
@@ -37,6 +38,9 @@ voice_assistant/
 ├── config.py         # 配置
 ├── db.py             # 数据库
 ├── tts_core.py       # ChatTTS 封装
+├── sovits_core.py    # GPT-SoVITS 推理封装
+├── sovits_train.py   # GPT-SoVITS 微调脚本调用
+├── setup_sovits.ps1  # GPT-SoVITS 安装
 ├── schema.sql        # 建表脚本
 ├── setup_tts_env.ps1 # 环境一键安装脚本
 ├── INSTALL.md        # 详细安装文档

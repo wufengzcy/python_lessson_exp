@@ -16,6 +16,15 @@ logs/
 # Generated audio
 *.wav
 
+# GPT-SoVITS engine (clone locally, large)
+engines/GPT-SoVITS/
+
+# User voice samples
+data/voices/
+
+# Large zip archives
+*.zip
+
 # IDE / OS
 .vscode/
 .idea/

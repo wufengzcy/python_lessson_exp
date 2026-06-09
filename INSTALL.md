@@ -16,8 +16,9 @@
 6. [下载 ChatTTS 模型（必做）](#6-下载-chattts-模型必做)
 7. [验证安装](#7-验证安装)
 8. [启动程序](#8-启动程序)
-9. [常见问题](#9-常见问题)
-10. [附录：路径对照表](#10-附录路径对照表)
+9. [GPT-SoVITS 声线克隆（可选）](#9-gpt-sovits-声线克隆可选)
+10. [常见问题](#10-常见问题)
+11. [附录：路径对照表](#11-附录路径对照表)
 
 ---
 
@@ -311,7 +312,40 @@ python main.py
 
 ---
 
-## 9. 常见问题
+## 9. GPT-SoVITS 声线克隆（可选）
+
+项目已集成 [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) 源码（`engines/GPT-SoVITS`），通过 **本地 Python import / subprocess 调训练脚本** 实现，**不依赖 HTTP API**。
+
+### 9.1 安装 GPT-SoVITS 引擎
+
+在已完成 ChatTTS 环境的基础上：
+
+```powershell
+cd <项目目录>
+.\.venv\Scripts\Activate.ps1
+powershell -ExecutionPolicy Bypass -File .\setup_sovits.ps1
+```
+
+脚本会 clone 仓库并下载 v2 预训练底模（数 GB，需较长时间）。
+
+额外依赖（若缺失）：
+
+```powershell
+pip install pyyaml peft librosa
+```
+
+### 9.2 使用流程
+
+1. 启动 `python main.py` 并登录  
+2. 点击 **「我的声线」**  
+3. 导入参考 WAV（3～60 秒干净人声）+ 填写参考文本  
+4. **零样本**：点「保存为零样本声线」（用底模 + 参考音频克隆，最快）  
+5. **微调**：点「开始微调训练」（调用 GPT-SoVITS 自带训练脚本）  
+6. 回到主界面，引擎选 **「GPT-SoVITS 克隆」**，选择声线后合成  
+
+---
+
+## 10. 常见问题
 
 ### Q1：`ModuleNotFoundError: pybase16384.backends.cython._core`
 
@@ -356,7 +390,7 @@ py -3.12 -m venv .venv
 
 ---
 
-## 10. 附录：路径对照表
+## 11. 附录：路径对照表
 
 以下为组内参考配置（可按自己电脑修改）：
 
@@ -368,6 +402,8 @@ py -3.12 -m venv .venv
 | pip 缓存 | `E:\python_cache\pip` |
 | HuggingFace 缓存 | `E:\python_cache\huggingface` |
 | ChatTTS 模型 | `<项目目录>\asset\` |
+| GPT-SoVITS 源码 | `<项目目录>\engines\GPT-SoVITS\` |
+| 用户声线样本 | `<项目目录>\data\voices\` |
 | 合成输出 | `<项目目录>\data\outputs\` |
 | 本地数据库 | `<项目目录>\data\app.db` |
 

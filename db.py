@@ -542,3 +542,120 @@ def count_commands_by_name(
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+# ---------- voice_profiles ----------
+
+
+def create_voice_profile(
+    user_id: int,
+    name: str,
+    ref_audio_path: str,
+    prompt_text: str,
+    mode: str = "zero_shot",
+    gpt_weights_path: str | None = None,
+    sovits_weights_path: str | None = None,
+    exp_name: str | None = None,
+    status: str = "ready",
+) -> int:
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO voice_profiles (
+                user_id, name, ref_audio_path, prompt_text, mode,
+                gpt_weights_path, sovits_weights_path, exp_name, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                name,
+                ref_audio_path,
+                prompt_text,
+                mode,
+                gpt_weights_path,
+                sovits_weights_path,
+                exp_name,
+                status,
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def update_voice_profile_status(
+    profile_id: int,
+    status: str,
+    error_message: str | None = None,
+    gpt_weights_path: str | None = None,
+    sovits_weights_path: str | None = None,
+) -> bool:
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            """
+            UPDATE voice_profiles
+            SET status = ?, error_message = ?,
+                gpt_weights_path = COALESCE(?, gpt_weights_path),
+                sovits_weights_path = COALESCE(?, sovits_weights_path)
+            WHERE id = ?
+            """,
+            (status, error_message, gpt_weights_path, sovits_weights_path, profile_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def get_voice_profile(profile_id: int) -> dict | None:
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM voice_profiles WHERE id = ?",
+            (profile_id,),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def list_voice_profiles_by_user(user_id: int, ready_only: bool = False) -> list[dict]:
+    conn = get_connection()
+    try:
+        if ready_only:
+            rows = conn.execute(
+                """
+                SELECT * FROM voice_profiles
+                WHERE user_id = ? AND status = 'ready'
+                ORDER BY created_at DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM voice_profiles
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def delete_voice_profile(profile_id: int, user_id: int) -> bool:
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "DELETE FROM voice_profiles WHERE id = ? AND user_id = ?",
+            (profile_id, user_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
