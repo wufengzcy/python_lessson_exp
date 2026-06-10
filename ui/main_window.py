@@ -11,11 +11,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import db
-import sovits_core
-import tts_core
 from config import OUTPUT_DIR, TTS_ENGINE_CHAT, TTS_ENGINE_SOVITS, TTS_MODEL_NAME
 from ui.theme import COLORS, FONTS, apply_theme, center_window, make_card
-from ui.voice_clone_window import VoiceCloneWindow
 
 
 class MainWindow(tk.Tk):
@@ -211,6 +208,8 @@ class MainWindow(tk.Tk):
         return db.get_voice_profile(pid)
 
     def _open_voice_clone(self):
+        from ui.voice_clone_window import VoiceCloneWindow
+
         VoiceCloneWindow(self, self.current_user, on_changed=self._refresh_voice_profiles)
 
     def _build_history_area(self):
@@ -276,6 +275,8 @@ class MainWindow(tk.Tk):
         self._update_char_count()
 
     def _start_synthesize(self):
+        import tts_core
+
         if self.is_synthesizing:
             return
         raw_text = self.text_input.get("1.0", tk.END).strip()
@@ -312,6 +313,9 @@ class MainWindow(tk.Tk):
         )
 
         def worker():
+            import sovits_core
+            import tts_core
+
             try:
                 if engine == TTS_ENGINE_SOVITS:
                     assert profile is not None
@@ -335,8 +339,9 @@ class MainWindow(tk.Tk):
                     lambda: self._on_synthesize_done(text, output_path, record_id, duration),
                 )
             except Exception as e:
-                db.update_transcription_result(record_id, text, 0, "failed", str(e))
-                self.after(0, lambda: self._on_synthesize_error(str(e)))
+                err_msg = str(e)
+                db.update_transcription_result(record_id, text, 0, "failed", err_msg)
+                self.after(0, lambda msg=err_msg: self._on_synthesize_error(msg))
             finally:
                 self.after(0, self._finish_synthesize_ui)
 

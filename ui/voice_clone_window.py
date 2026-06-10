@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import os
-import shutil
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+import audio_utils
 import db
-import sovits_core
-import sovits_train
 from config import VOICES_DIR
 from ui.theme import COLORS, FONTS, apply_theme, center_window, make_card
 
@@ -36,6 +34,8 @@ class VoiceCloneWindow(tk.Toplevel):
         self._build_list()
         self._refresh_list()
 
+        self._refresh_list()
+
     def _build_form(self):
         outer = ttk.Frame(self, padding=16)
         outer.pack(fill=tk.BOTH, expand=True)
@@ -48,7 +48,7 @@ class VoiceCloneWindow(tk.Toplevel):
         )
         ttk.Label(
             card,
-            text="导入 3～60 秒干净人声，填写录音里说的文字。可先零样本克隆，也可微调训练。",
+            text="导入 0.6～50 秒干净人声（支持 WAV / M4A / MP3 等），参考文本请与音频内容一致。可先零样本克隆，也可微调训练。",
             style="CardMuted.TLabel",
         ).pack(anchor=tk.W, pady=(4, 12))
 
@@ -63,7 +63,7 @@ class VoiceCloneWindow(tk.Toplevel):
         ttk.Label(row2, text="参考音频", style="Card.TLabel", width=10).pack(side=tk.LEFT)
         self.lbl_audio = ttk.Label(row2, text="未选择", style="CardMuted.TLabel")
         self.lbl_audio.pack(side=tk.LEFT, padx=(8, 8))
-        ttk.Button(row2, text="导入 WAV", style="Secondary.TButton", command=self._import_wav).pack(
+        ttk.Button(row2, text="导入音频", style="Secondary.TButton", command=self._import_audio).pack(
             side=tk.LEFT
         )
 
@@ -83,9 +83,11 @@ class VoiceCloneWindow(tk.Toplevel):
         self.text_prompt.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
         self.text_prompt.insert(tk.END, "请填写参考音频里实际说出的内容，尽量与录音一致。")
 
-        status = sovits_core.engine_status_message()
-        self.lbl_engine = ttk.Label(card, text=f"引擎状态：{status}", style="CardMuted.TLabel")
+        self.lbl_engine = ttk.Label(
+            card, text="引擎状态：检测中…", style="CardMuted.TLabel"
+        )
         self.lbl_engine.pack(anchor=tk.W, pady=(10, 0))
+        self.after(100, self._refresh_engine_status)
 
         btns = ttk.Frame(card, style="Card.TFrame")
         btns.pack(fill=tk.X, pady=(12, 0))
@@ -104,6 +106,16 @@ class VoiceCloneWindow(tk.Toplevel):
 
         self.lbl_progress = ttk.Label(card, text="", style="CardMuted.TLabel")
         self.lbl_progress.pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(
+            card,
+            text="训练期间每 15 秒刷新进度；若 8～10 分钟无新进展将自动判定卡死并停止。",
+            style="CardMuted.TLabel",
+        ).pack(anchor=tk.W, pady=(2, 0))
+
+    def _refresh_engine_status(self):
+        import sovits_core
+
+        self.lbl_engine.config(text=f"引擎状态：{sovits_core.engine_status_message()}")
 
     def _build_list(self):
         frame = ttk.LabelFrame(self, text="  我的声线  ", style="Card.TLabelframe", padding=12)
@@ -120,13 +132,21 @@ class VoiceCloneWindow(tk.Toplevel):
             anchor=tk.E, pady=(8, 0)
         )
 
-    def _import_wav(self):
+    def _import_audio(self):
         path = filedialog.askopenfilename(
             parent=self,
             title="选择参考音频",
-            filetypes=[("WAV", "*.wav"), ("全部", "*.*")],
+            filetypes=audio_utils.IMPORT_FILETYPES,
         )
         if path:
+            ext = Path(path).suffix.lower()
+            if ext and ext not in audio_utils.SUPPORTED_IMPORT_EXTENSIONS:
+                messagebox.showwarning(
+                    "格式不支持",
+                    f"暂不支持 {ext}，请选择 WAV、M4A、MP3 等常见格式。",
+                    parent=self,
+                )
+                return
             self.ref_audio_path = path
             self.lbl_audio.config(text=os.path.basename(path))
 
@@ -145,14 +165,21 @@ class VoiceCloneWindow(tk.Toplevel):
         return name, prompt, self.ref_audio_path
 
     def _copy_ref_audio(self, user_id: int, name: str, src: str) -> str:
-        safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+        safe = "".join(
+            c if c.isascii() and (c.isalnum() or c in "-_") else "_" for c in name
+        ).strip("_") or "voice"
         dst_dir = Path(VOICES_DIR) / str(user_id) / safe
         dst_dir.mkdir(parents=True, exist_ok=True)
         dst = dst_dir / "reference.wav"
-        shutil.copy2(src, dst)
+        try:
+            audio_utils.convert_to_wav(src, dst)
+        except Exception as e:
+            raise RuntimeError(f"参考音频转换失败: {e}") from e
         return str(dst.resolve())
 
     def _save_zero_shot(self):
+        import sovits_core
+
         data = self._validate()
         if not data:
             return
@@ -160,7 +187,11 @@ class VoiceCloneWindow(tk.Toplevel):
             messagebox.showerror("不可用", sovits_core.engine_status_message(), parent=self)
             return
         name, prompt, src = data
-        ref_path = self._copy_ref_audio(self.current_user["id"], name, src)
+        try:
+            ref_path = self._copy_ref_audio(self.current_user["id"], name, src)
+        except RuntimeError as e:
+            messagebox.showerror("音频导入失败", str(e), parent=self)
+            return
         db.create_voice_profile(
             self.current_user["id"],
             name,
@@ -176,6 +207,8 @@ class VoiceCloneWindow(tk.Toplevel):
             self.on_changed()
 
     def _start_train(self):
+        import sovits_core
+
         if self.is_training:
             return
         data = self._validate()
@@ -186,13 +219,19 @@ class VoiceCloneWindow(tk.Toplevel):
             return
         if not messagebox.askyesno(
             "确认训练",
-            "微调将调用 GPT-SoVITS 本地训练脚本，需 NVIDIA 显卡，可能耗时较久。是否继续？",
+            "微调将调用 GPT-SoVITS 本地训练，需 NVIDIA 显卡，约 20～40 分钟。\n"
+            "训练前请关闭其他占内存的程序；若报「页面文件太小」，请在系统设置里增大虚拟内存。\n"
+            "是否继续？",
             parent=self,
         ):
             return
 
         name, prompt, src = data
-        ref_path = self._copy_ref_audio(self.current_user["id"], name, src)
+        try:
+            ref_path = self._copy_ref_audio(self.current_user["id"], name, src)
+        except RuntimeError as e:
+            messagebox.showerror("音频导入失败", str(e), parent=self)
+            return
         profile_id = db.create_voice_profile(
             self.current_user["id"],
             name,
@@ -202,16 +241,25 @@ class VoiceCloneWindow(tk.Toplevel):
             status="training",
         )
         self.is_training = True
-        self.lbl_progress.config(text="训练已开始…")
+        self.lbl_progress.config(text="训练已开始…", foreground=COLORS["muted"])
+
+        def progress(msg: str):
+            def update(m=msg):
+                self.lbl_progress.config(text=m)
+                if "⚠" in m or "卡死" in m:
+                    self.lbl_progress.config(foreground=COLORS["danger"])
+                else:
+                    self.lbl_progress.config(foreground=COLORS["muted"])
+
+            self.after(0, update)
 
         def worker():
+            import sovits_train
+
             try:
                 wav_dir, list_path, exp_name = sovits_train.prepare_dataset(
                     self.current_user["id"], name, ref_path, prompt
                 )
-
-                def progress(msg: str):
-                    self.after(0, lambda: self.lbl_progress.config(text=msg))
 
                 sovits_w, gpt_w = sovits_train.run_finetune(
                     list_path, wav_dir, exp_name, progress=progress
@@ -222,10 +270,11 @@ class VoiceCloneWindow(tk.Toplevel):
                     gpt_weights_path=gpt_w,
                     sovits_weights_path=sovits_w,
                 )
-                self.after(0, lambda: self._on_train_done(name, exp_name))
+                self.after(0, lambda n=name, ex=exp_name: self._on_train_done(n, ex))
             except Exception as e:
-                db.update_voice_profile_status(profile_id, "failed", str(e))
-                self.after(0, lambda: self._on_train_error(str(e)))
+                err_msg = str(e)
+                db.update_voice_profile_status(profile_id, "failed", err_msg)
+                self.after(0, lambda msg=err_msg: self._on_train_error(msg))
             finally:
                 self.after(0, self._finish_train_ui)
 
@@ -241,8 +290,9 @@ class VoiceCloneWindow(tk.Toplevel):
             self.on_changed()
 
     def _on_train_error(self, err: str):
-        self.lbl_progress.config(text=f"训练失败：{err}")
-        messagebox.showerror("训练失败", err, parent=self)
+        self.lbl_progress.config(text=f"训练失败：{err[:80]}", foreground=COLORS["danger"])
+        title = "训练卡死" if "卡死" in err else "训练失败"
+        messagebox.showerror(title, err, parent=self)
         self._refresh_list()
 
     def _finish_train_ui(self):

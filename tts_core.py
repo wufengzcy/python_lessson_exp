@@ -9,12 +9,10 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-import ChatTTS
-
 from config import ASSET_DIR, TTS_SAMPLE_RATE
 
 _lock = threading.Lock()
-_engine: ChatTTS.Chat | None = None
+_engine = None
 
 
 def normalize_text(text: str) -> str:
@@ -22,7 +20,9 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def get_engine() -> ChatTTS.Chat:
+def get_engine():
+    import ChatTTS
+
     global _engine
     with _lock:
         if _engine is not None:
