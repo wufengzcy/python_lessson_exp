@@ -99,9 +99,10 @@ if (-not (Test-Path $G2PWMarker)) {
 Write-Host "Installing GPT-SoVITS Python deps into project .venv ..."
 Set-Location $ProjectDir
 & $VenvPip install -q huggingface_hub
-& $VenvPip install -q pyyaml peft librosa transformers modelscope sentencepiece jieba jieba_fast cn2an pypinyin g2p_en wordsegment pydub imageio-ffmpeg ffmpeg-python x-transformers tensorboard "pytorch-lightning>=2.4" opencc-python-reimplemented onnxruntime-gpu "fast_langdetect>=0.3.1" split-lang
+& $VenvPip install -q pyyaml peft librosa "transformers>=4.46,<=4.50" modelscope sentencepiece jieba jieba_fast cn2an pypinyin g2p_en wordsegment pydub imageio-ffmpeg ffmpeg-python x-transformers tensorboard "pytorch-lightning>=2.4" opencc-python-reimplemented onnxruntime-gpu "fast_langdetect>=0.3.1" split-lang
 & $VenvPip install -q -r (Join-Path $EngineDir "extra-req.txt") --no-deps
 & $VenvPip install -q -r (Join-Path $EngineDir "requirements.txt") 2>$null
+& $VenvPip install -q "transformers>=4.46,<=4.50"
 
 Write-Host "Applying Windows training patches ..."
 & $VenvPython (Join-Path $ProjectDir "scripts\patch_sovits_windows.py")

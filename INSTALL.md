@@ -373,17 +373,35 @@ py -3.12 -m venv .venv
 **原因**：新版 torchaudio 保存方式变更。  
 **解决**：本项目已用 `soundfile` 保存，请 `pip install soundfile`；不要单独改回 `torchaudio.save`。
 
-### Q5：文本里有换行，合成异常或漏读
+### Q5：ChatTTS 合成失败 `'DynamicCache' object has no attribute 'layers'`
+
+**原因**：安装 GPT-SoVITS 时把 `transformers` 升到了与 ChatTTS 不兼容的版本（ChatTTS 0.2.5 与 transformers 5.x 或部分 4.4x 不兼容）。  
+**解决**：在项目根目录执行：
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python scripts/fix_chattts_transformers.py
+```
+
+或手动：
+
+```powershell
+pip install "transformers>=4.46,<=4.50"
+```
+
+然后**关闭并重启** `main.py`，再试 ChatTTS 合成。
+
+### Q6：文本里有换行，合成异常或漏读
 
 **原因**：ChatTTS 不支持换行符。  
 **解决**：输入框中避免多行；程序内部会自动将换行替换为空格。
 
-### Q6：`pip` 报 `Cache entry deserialization failed`
+### Q7：`pip` 报 `Cache entry deserialization failed`
 
 **原因**：pip 缓存损坏。  
 **解决**：可忽略（不影响安装）；或删除 `$env:PIP_CACHE_DIR` 对应目录后重试。
 
-### Q7：RTX 5060 提示 sm_120 不兼容
+### Q8：RTX 5060 提示 sm_120 不兼容
 
 **原因**：PyTorch 版本与显卡架构不匹配。  
 **解决**：安装 **cu130** 版 PyTorch（见 5.3 节），并更新 NVIDIA 驱动到最新。

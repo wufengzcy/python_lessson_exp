@@ -98,7 +98,12 @@ A: 检查路径是否为 deploy\voice_packs\finetune_15\，且含 pack.json。
 Q: 引擎状态未就绪？
 A: 重新运行 setup_sovits.ps1，确认 engines\GPT-SoVITS 预训练模型已下载完整。
 
-Q: ChatTTS 报错？
+Q: ChatTTS 报错 DynamicCache / layers / seen_tokens？
+A: transformers 版本与 ChatTTS 冲突（装 GPT-SoVITS 后常见）。执行：
+   python scripts/fix_chattts_transformers.py
+   然后重启 main.py。
+
+Q: ChatTTS 报错 asset 或 load False？
 A: 确认 asset\ 目录已下载模型（见第二节）。
 
 Q: 合成没有「15样本训练」声线？（最常见）
