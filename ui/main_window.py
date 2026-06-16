@@ -205,7 +205,10 @@ class MainWindow(tk.Tk):
         pid = self.voice_profile_map.get(self.voice_var.get())
         if pid is None:
             return None
-        return db.get_voice_profile(pid)
+        from path_utils import resolve_voice_profile
+
+        profile = db.get_voice_profile(pid)
+        return resolve_voice_profile(profile) if profile else None
 
     def _open_voice_clone(self):
         from ui.voice_clone_window import VoiceCloneWindow

@@ -372,12 +372,14 @@ class VoiceCloneWindow(tk.Toplevel):
                 sovits_w, gpt_w = sovits_train.run_finetune(
                     list_path, wav_dir, exp_name, progress=progress
                 )
+                from path_utils import to_project_relative
+
                 db.update_voice_profile_status(
                     profile_id,
                     "ready",
-                    gpt_weights_path=gpt_w,
-                    sovits_weights_path=sovits_w,
-                    ref_audio_path=ref_path,
+                    gpt_weights_path=to_project_relative(gpt_w) if gpt_w else None,
+                    sovits_weights_path=to_project_relative(sovits_w) if sovits_w else None,
+                    ref_audio_path=to_project_relative(ref_path),
                     prompt_text=ref_prompt,
                 )
                 self.after(0, lambda n=name, ex=exp_name: self._on_train_done(n, ex))

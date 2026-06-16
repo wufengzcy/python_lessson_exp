@@ -27,8 +27,11 @@ logs/
 # GPT-SoVITS engine (clone locally, large)
 engines/GPT-SoVITS/
 
-# User voice samples
-data/voices/
+# Voice pack binaries (share offline, do not commit)
+deploy/voice_packs/**/*
+!deploy/voice_packs/**/README.txt
+!deploy/voice_packs/**/pack.json
+data/voice_packs/**/*.wav
 
 # Large zip archives
 *.zip
