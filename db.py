@@ -591,6 +591,8 @@ def update_voice_profile_status(
     error_message: str | None = None,
     gpt_weights_path: str | None = None,
     sovits_weights_path: str | None = None,
+    ref_audio_path: str | None = None,
+    prompt_text: str | None = None,
 ) -> bool:
     conn = get_connection()
     try:
@@ -599,10 +601,20 @@ def update_voice_profile_status(
             UPDATE voice_profiles
             SET status = ?, error_message = ?,
                 gpt_weights_path = COALESCE(?, gpt_weights_path),
-                sovits_weights_path = COALESCE(?, sovits_weights_path)
+                sovits_weights_path = COALESCE(?, sovits_weights_path),
+                ref_audio_path = COALESCE(?, ref_audio_path),
+                prompt_text = COALESCE(?, prompt_text)
             WHERE id = ?
             """,
-            (status, error_message, gpt_weights_path, sovits_weights_path, profile_id),
+            (
+                status,
+                error_message,
+                gpt_weights_path,
+                sovits_weights_path,
+                ref_audio_path,
+                prompt_text,
+                profile_id,
+            ),
         )
         conn.commit()
         return cur.rowcount > 0

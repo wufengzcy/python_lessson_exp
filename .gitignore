@@ -8,8 +8,16 @@ venv/
 # ChatTTS models (download locally, ~1GB)
 asset/
 
-# Runtime data
-data/
+# Runtime data (keep train_batches manifests only)
+data/*
+!data/train_batches/
+!data/train_batches/**/
+!data/train_batches/**/*.tsv
+!data/train_batches/**/*.txt
+data/train_batches/**/*.m4a
+data/train_batches/**/*.wav
+data/train_batches/**/*.mp3
+data/train_batches/**/*.flac
 logs/
 *.db
 

@@ -13,6 +13,14 @@ POLL_SECONDS = 15
 STALL_SECONDS_PREP = 10 * 60
 STALL_SECONDS_TRAIN = 8 * 60
 
+_NATIVE_CRASH_CODES: dict[int, str] = {
+    -1073741819: (
+        "GPU 训练进程崩溃 (0xC0000005)。"
+        "通常是 Windows 单卡 DDP/CUDA 兼容问题或显存不足，请重试或关闭占显存的程序。"
+    ),
+    -1073740791: "GPU 训练进程异常终止 (0xC0000409)。请更新显卡驱动后重试。",
+}
+
 
 class TrainingStalledError(RuntimeError):
     """训练 subprocess 长时间无任何文件/日志更新。"""
@@ -44,17 +52,50 @@ def _format_duration(seconds: int) -> str:
     return f"{minutes}分{sec:02d}秒"
 
 
-def format_subprocess_error(output: str) -> str:
+def format_subprocess_error(output: str, returncode: int | None = None) -> str:
+    if returncode is not None and returncode in _NATIVE_CRASH_CODES:
+        return _NATIVE_CRASH_CODES[returncode]
     text = (output or "").strip()
+    if "UnpicklingError" in text or "Weights only load failed" in text:
+        return (
+            "PyTorch 2.6 加载训练 checkpoint 失败（weights_only 限制）。"
+            "已在新版补丁中修复；若仍报错，请删除该实验目录下 logs_s1_v2/ckpt 后重新训练。"
+        )
+    if "max_epochs=" in text and "reached" in text:
+        if "UnicodeEncodeError" in text or "gbk" in text.lower():
+            return (
+                "GPT 训练轮次已完成，但 Windows 控制台编码导致进度条退出时报错。"
+                "若已生成 GPT_weights_v2 权重文件，可忽略此提示并直接使用。"
+            )
     if "Traceback" in text:
         tail = text[text.rfind("Traceback") :]
         lines = [ln for ln in tail.splitlines() if ln.strip()]
-        return "\n".join(lines[-10:])
+        # 优先展示非 Rich/GBK 相关的真实错误
+        for i, line in enumerate(lines):
+            if line.startswith("UnicodeEncodeError") and "gbk" in line.lower():
+                continue
+            if line.startswith("ValueError:") or line.startswith("RuntimeError:"):
+                return "\n".join(lines[i : i + 8])
+        return "\n".join(lines[-8:])
     for line in reversed(text.splitlines()):
         line = line.strip()
-        if line and not line.startswith("INFO:"):
-            return line[:800]
+        if not line or line.startswith("INFO:"):
+            continue
+        if "find_unused_parameters" in line and "Warning:" in line:
+            continue
+        if line.startswith("[rank") and "Warning:" in line:
+            continue
+        return line[:800]
     return text[:800] if text else "训练子进程失败"
+
+
+def log_indicates_step_completed(output: str) -> bool:
+    text = (output or "").lower()
+    if "max_epochs=" in text and "reached" in text:
+        return True
+    if "training done" in text:
+        return True
+    return False
 
 
 def watch_paths_for_step(
@@ -171,6 +212,15 @@ def run_with_watchdog(
         output = log_path.read_text(encoding="utf-8", errors="replace")
 
     if returncode != 0:
-        detail = format_subprocess_error(output)
+        if log_indicates_step_completed(output):
+            return output
+        detail = format_subprocess_error(output, returncode)
+        if log_path and log_path.is_file():
+            try:
+                log_tail = log_path.read_text(encoding="utf-8", errors="replace")[-4000:]
+                if log_tail.strip():
+                    detail = f"{detail}\n\n--- 日志末尾 ---\n{log_tail.strip()}"
+            except OSError:
+                pass
         raise RuntimeError(detail or f"命令失败: {' '.join(cmd)}")
     return output

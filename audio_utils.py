@@ -43,6 +43,65 @@ def _write_wav(path: Path, audio: np.ndarray, sample_rate: int) -> None:
     sf.write(str(path), audio.astype(np.float32), sample_rate)
 
 
+INFER_REF_MIN_SECONDS = 3.0
+INFER_REF_MAX_SECONDS = 10.0
+INFER_REF_TARGET_SECONDS = 8.0
+
+
+def align_prompt_text_for_infer(
+    prompt_text: str,
+    total_audio_seconds: float,
+    infer_seconds: float,
+) -> str:
+    """参考音频被截短时，同步截短参考文本，避免音文不对齐。"""
+    prompt_text = prompt_text.strip()
+    if not prompt_text or infer_seconds >= total_audio_seconds - 0.1:
+        return prompt_text
+
+    ratio = infer_seconds / total_audio_seconds
+    cut = max(1, int(len(prompt_text) * ratio))
+    trimmed = prompt_text[:cut].strip()
+    for sep in "。！？.!?，,":
+        idx = trimmed.rfind(sep)
+        if idx >= max(0, len(trimmed) - 24):
+            return trimmed[: idx + 1].strip()
+    return trimmed
+
+
+def prepare_ref_audio_for_inference(
+    src: str | Path,
+    prompt_text: str = "",
+    dst: str | Path | None = None,
+) -> tuple[Path, str]:
+    """GPT-SoVITS 推理要求参考音频 3~10 秒；过长则截取开头并同步截短参考文本。"""
+    src_path = Path(src)
+    if not src_path.is_file():
+        raise FileNotFoundError(f"参考音频不存在: {src_path}")
+
+    prompt_text = prompt_text.strip()
+    duration = get_duration(src_path)
+    if duration < INFER_REF_MIN_SECONDS:
+        raise ValueError(
+            f"参考音频过短（{duration:.1f}s）。GPT-SoVITS 合成需要 "
+            f"{INFER_REF_MIN_SECONDS:g}~{INFER_REF_MAX_SECONDS:g} 秒的参考音频，"
+            "请重新录制或导入更长的样本。"
+        )
+    if duration <= INFER_REF_MAX_SECONDS:
+        return src_path, prompt_text
+
+    keep_seconds = min(INFER_REF_TARGET_SECONDS, INFER_REF_MAX_SECONDS)
+    audio, sr = sf.read(str(src_path), always_2d=False)
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.ndim > 1:
+        audio = np.mean(audio, axis=1)
+    audio = audio[: int(keep_seconds * sr)]
+
+    out_path = Path(dst) if dst else src_path.with_name(f"{src_path.stem}_infer.wav")
+    _write_wav(out_path, audio, sr)
+    aligned_prompt = align_prompt_text_for_infer(prompt_text, duration, keep_seconds)
+    return out_path, aligned_prompt
+
+
 def trim_to_max_duration(path: str | Path, max_seconds: float) -> float:
     """将 WAV 裁剪到指定时长（保留开头），返回最终秒数。"""
     wav_path = Path(path)

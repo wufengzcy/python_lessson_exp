@@ -11,6 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 import audio_utils
 import db
 from config import VOICES_DIR
+from train_batch import load_samples_from_folder
 from ui.theme import COLORS, FONTS, apply_theme, center_window, make_card
 
 
@@ -22,13 +23,14 @@ class VoiceCloneWindow(tk.Toplevel):
         self.current_user = current_user
         self.on_changed = on_changed
         self.ref_audio_path: str | None = None
+        self.train_samples: list[tuple[str, str]] = []
         self.is_training = False
 
         os.makedirs(VOICES_DIR, exist_ok=True)
 
         self.title("智声助手 · 我的声线")
         apply_theme(self)
-        center_window(self, 720, 560)
+        center_window(self, 720, 640)
 
         self._build_form()
         self._build_list()
@@ -48,7 +50,7 @@ class VoiceCloneWindow(tk.Toplevel):
         )
         ttk.Label(
             card,
-            text="导入 0.6～50 秒干净人声（支持 WAV / M4A / MP3 等），参考文本请与音频内容一致。可先零样本克隆，也可微调训练。",
+            text="导入 3～30 秒干净人声（支持 WAV / M4A / MP3）。微调建议添加 3 条以上样本，每条文本与录音一致。",
             style="CardMuted.TLabel",
         ).pack(anchor=tk.W, pady=(4, 12))
 
@@ -82,6 +84,46 @@ class VoiceCloneWindow(tk.Toplevel):
         )
         self.text_prompt.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
         self.text_prompt.insert(tk.END, "请填写参考音频里实际说出的内容，尽量与录音一致。")
+
+        row4 = ttk.Frame(card, style="Card.TFrame")
+        row4.pack(fill=tk.X, pady=(8, 0))
+        ttk.Label(row4, text="训练样本", style="Card.TLabel", width=10).pack(side=tk.LEFT, anchor=tk.N)
+        sample_wrap = ttk.Frame(row4, style="Card.TFrame")
+        sample_wrap.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+        self.list_train_samples = tk.Listbox(
+            sample_wrap,
+            height=3,
+            font=FONTS["small"],
+            bg=COLORS["input_bg"],
+            relief=tk.FLAT,
+            highlightthickness=1,
+            highlightbackground=COLORS["border"],
+        )
+        self.list_train_samples.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        sample_btns = ttk.Frame(sample_wrap, style="Card.TFrame")
+        sample_btns.pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            sample_btns,
+            text="导入文件夹",
+            style="Secondary.TButton",
+            command=self._import_train_folder,
+        ).pack(fill=tk.X, pady=(6, 0))
+        ttk.Button(
+            sample_btns,
+            text="加入列表",
+            style="Secondary.TButton",
+            command=self._add_train_sample,
+        ).pack(fill=tk.X)
+        ttk.Button(
+            sample_btns,
+            text="清空",
+            style="Secondary.TButton",
+            command=self._clear_train_samples,
+        ).pack(fill=tk.X, pady=(6, 0))
+        self.lbl_sample_count = ttk.Label(
+            sample_wrap, text="0 条（微调建议 ≥3）", style="CardMuted.TLabel"
+        )
+        self.lbl_sample_count.pack(side=tk.LEFT, padx=(8, 0))
 
         self.lbl_engine = ttk.Label(
             card, text="引擎状态：检测中…", style="CardMuted.TLabel"
@@ -152,17 +194,79 @@ class VoiceCloneWindow(tk.Toplevel):
 
     def _validate(self) -> tuple[str, str, str] | None:
         name = self.entry_name.get().strip()
-        prompt = self.text_prompt.get("1.0", tk.END).strip()
         if not name:
             messagebox.showwarning("提示", "请填写声线名称", parent=self)
             return None
+        if self.train_samples:
+            return name, self.train_samples[0][1], self.train_samples[0][0]
+        prompt = self.text_prompt.get("1.0", tk.END).strip()
         if not self.ref_audio_path:
-            messagebox.showwarning("提示", "请先导入参考音频", parent=self)
+            messagebox.showwarning("提示", "请先导入参考音频或训练文件夹", parent=self)
             return None
         if not prompt:
             messagebox.showwarning("提示", "请填写参考文本", parent=self)
             return None
         return name, prompt, self.ref_audio_path
+
+    def _add_train_sample(self):
+        data = self._validate()
+        if not data:
+            return
+        _name, prompt, src = data
+        self.train_samples.append((src, prompt))
+        self._refresh_train_sample_list()
+        messagebox.showinfo(
+            "已添加",
+            f"已加入第 {len(self.train_samples)} 条训练样本。\n"
+            "可继续导入其他音频并填写对应文本后再点「加入列表」。",
+            parent=self,
+        )
+
+    def _import_train_folder(self):
+        folder = filedialog.askdirectory(
+            parent=self,
+            title="选择训练样本文件夹（含 manifest.tsv 或成对 wav+txt）",
+            initialdir=str(Path(VOICES_DIR).parent / "train_batches"),
+        )
+        if not folder:
+            return
+        try:
+            samples = load_samples_from_folder(folder)
+        except (OSError, ValueError) as e:
+            messagebox.showerror("导入失败", str(e), parent=self)
+            return
+        self.train_samples = samples
+        self.ref_audio_path = samples[0][0]
+        self.lbl_audio.config(text=os.path.basename(samples[0][0]))
+        self.text_prompt.delete("1.0", tk.END)
+        self.text_prompt.insert(tk.END, samples[0][1])
+        self._refresh_train_sample_list()
+        messagebox.showinfo(
+            "导入成功",
+            f"已从文件夹加载 {len(samples)} 条样本。\n"
+            "请填写声线名称，然后点击「开始微调训练」。",
+            parent=self,
+        )
+
+    def _clear_train_samples(self):
+        self.train_samples.clear()
+        self._refresh_train_sample_list()
+
+    def _refresh_train_sample_list(self):
+        self.list_train_samples.delete(0, tk.END)
+        for i, (path, text) in enumerate(self.train_samples, start=1):
+            preview = text[:24] + ("…" if len(text) > 24 else "")
+            self.list_train_samples.insert(tk.END, f"{i}. {os.path.basename(path)} · {preview}")
+        count = len(self.train_samples)
+        hint = f"{count} 条"
+        if count < 3:
+            hint += "（微调建议 ≥3）"
+        self.lbl_sample_count.config(text=hint)
+
+    def _collect_train_samples(self, prompt: str, src: str) -> list[tuple[str, str]]:
+        if self.train_samples:
+            return list(self.train_samples)
+        return [(src, prompt)]
 
     def _copy_ref_audio(self, user_id: int, name: str, src: str) -> str:
         safe = "".join(
@@ -219,24 +323,21 @@ class VoiceCloneWindow(tk.Toplevel):
             return
         if not messagebox.askyesno(
             "确认训练",
-            "微调将调用 GPT-SoVITS 本地训练，需 NVIDIA 显卡，约 20～40 分钟。\n"
-            "训练前请关闭其他占内存的程序；若报「页面文件太小」，请在系统设置里增大虚拟内存。\n"
-            "是否继续？",
+            "微调将调用 GPT-SoVITS 本地训练，需 NVIDIA 显卡。\n"
+            "建议准备 3～10 条样本（每条 3～30 秒、文本与录音一致），"
+            "样本越多效果越稳。\n"
+            "训练前请关闭其他占内存的程序。是否继续？",
             parent=self,
         ):
             return
 
         name, prompt, src = data
-        try:
-            ref_path = self._copy_ref_audio(self.current_user["id"], name, src)
-        except RuntimeError as e:
-            messagebox.showerror("音频导入失败", str(e), parent=self)
-            return
+        samples = self._collect_train_samples(prompt, src)
         profile_id = db.create_voice_profile(
             self.current_user["id"],
             name,
-            ref_path,
-            prompt,
+            samples[0][0],
+            samples[0][1],
             mode="finetuned",
             status="training",
         )
@@ -257,8 +358,15 @@ class VoiceCloneWindow(tk.Toplevel):
             import sovits_train
 
             try:
-                wav_dir, list_path, exp_name = sovits_train.prepare_dataset(
-                    self.current_user["id"], name, ref_path, prompt
+                wav_dir, list_path, exp_name, ref_prompt = sovits_train.prepare_dataset(
+                    self.current_user["id"], name, samples
+                )
+                ref_path = str((Path(wav_dir).parent / "reference.wav").resolve())
+                db.update_voice_profile_status(
+                    profile_id,
+                    "training",
+                    ref_audio_path=ref_path,
+                    prompt_text=ref_prompt,
                 )
 
                 sovits_w, gpt_w = sovits_train.run_finetune(
@@ -269,6 +377,8 @@ class VoiceCloneWindow(tk.Toplevel):
                     "ready",
                     gpt_weights_path=gpt_w,
                     sovits_weights_path=sovits_w,
+                    ref_audio_path=ref_path,
+                    prompt_text=ref_prompt,
                 )
                 self.after(0, lambda n=name, ex=exp_name: self._on_train_done(n, ex))
             except Exception as e:
@@ -283,6 +393,8 @@ class VoiceCloneWindow(tk.Toplevel):
 
     def _on_train_done(self, name: str, exp_name: str):
         self.lbl_progress.config(text=f"训练完成：{name}")
+        self.train_samples.clear()
+        self._refresh_train_sample_list()
         messagebox.showinfo("完成", f"声线「{name}」微调完成，可使用 GPT-SoVITS 合成。", parent=self)
         db.create_operation_log(self.current_user["id"], "voice_train", f"训练完成 {exp_name}")
         self._refresh_list()
@@ -290,9 +402,14 @@ class VoiceCloneWindow(tk.Toplevel):
             self.on_changed()
 
     def _on_train_error(self, err: str):
-        self.lbl_progress.config(text=f"训练失败：{err[:80]}", foreground=COLORS["danger"])
+        from train_watchdog import format_subprocess_error
+
+        short = format_subprocess_error(err) if len(err) > 200 else err
+        self.lbl_progress.config(
+            text=f"训练失败：{short[:120]}", foreground=COLORS["danger"]
+        )
         title = "训练卡死" if "卡死" in err else "训练失败"
-        messagebox.showerror(title, err, parent=self)
+        messagebox.showerror(title, short, parent=self)
         self._refresh_list()
 
     def _finish_train_ui(self):

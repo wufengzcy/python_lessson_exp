@@ -55,6 +55,8 @@ def _build_sovits_env(root: Path, extra: dict | None = None) -> dict:
         env.update(extra)
     if os.name == "nt":
         env["USE_LIBUV"] = "0"
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
         env.setdefault("OMP_NUM_THREADS", "1")
         env.setdefault("MKL_NUM_THREADS", "1")
         env.setdefault("CUDA_MODULE_LOADING", "LAZY")
@@ -166,13 +168,15 @@ def _verify_preprocess_ready(opt_dir: Path) -> None:
 def prepare_dataset(
     user_id: int,
     profile_name: str,
-    wav_src: str,
-    transcript: str,
-) -> tuple[str, str, str]:
-    """复制样本并生成 GPT-SoVITS 训练用 list 文件。返回 (wav_dir, list_path, exp_name)。"""
-    transcript = transcript.strip()
-    if not transcript:
-        raise ValueError("参考文本不能为空")
+    samples: list[tuple[str, str]],
+) -> tuple[str, str, str, str]:
+    """
+    复制训练样本并生成 GPT-SoVITS 训练用 meta.list。
+    samples: [(音频路径, 对应文本), ...]，建议 3～10 条、每条 3～30 秒。
+    返回 (wav_dir, list_path, exp_name, ref_prompt_text)。
+    """
+    if not samples:
+        raise ValueError("至少需要一个训练样本")
 
     safe_name = "".join(
         c if c.isascii() and (c.isalnum() or c in "-_") else "_" for c in profile_name
@@ -182,18 +186,27 @@ def prepare_dataset(
     wav_dir = root / "wavs"
     wav_dir.mkdir(parents=True, exist_ok=True)
 
-    dst_wav = wav_dir / "sample.wav"
-    audio_utils.convert_to_wav(wav_src, dst_wav)
-    duration = audio_utils.trim_to_max_duration(dst_wav, FINETUNE_MAX_SECONDS)
-    if duration < FINETUNE_MIN_SECONDS:
-        raise ValueError(
-            f"参考音频过短（{duration:.1f}s），微调至少需要 {FINETUNE_MIN_SECONDS}s"
-        )
+    lines: list[str] = []
+    for i, (wav_src, transcript) in enumerate(samples, start=1):
+        transcript = transcript.strip()
+        if not transcript:
+            raise ValueError(f"第 {i} 条样本的参考文本不能为空")
+        dst_wav = wav_dir / f"sample_{i:03d}.wav"
+        audio_utils.convert_to_wav(wav_src, dst_wav)
+        duration = audio_utils.trim_to_max_duration(dst_wav, FINETUNE_MAX_SECONDS)
+        if duration < FINETUNE_MIN_SECONDS:
+            raise ValueError(
+                f"第 {i} 条样本过短（{duration:.1f}s），每条至少需要 {FINETUNE_MIN_SECONDS}s"
+            )
+        lines.append(f"{dst_wav.resolve()}|{safe_name}|zh|{transcript}")
 
     list_path = root / "meta.list"
-    line = f"{dst_wav.resolve()}|{safe_name}|zh|{transcript}"
-    list_path.write_text(line + "\n", encoding="utf-8")
-    return str(wav_dir), str(list_path), exp_name
+    list_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    ref_wav = root / "reference.wav"
+    shutil.copy2(wav_dir / "sample_001.wav", ref_wav)
+    ref_prompt = samples[0][1].strip()
+    return str(wav_dir), str(list_path), exp_name, ref_prompt
 
 
 def _ensure_train_dirs(opt_dir: Path, engine_root: Path) -> None:
@@ -361,6 +374,8 @@ def run_finetune(
     s1_data["train"]["if_save_latest"] = True
     s1_data["train"]["half_weights_save_dir"] = "GPT_weights_v2"
     s1_data["train"]["exp_name"] = exp_name
+    if os.name == "nt":
+        s1_data["data"]["num_workers"] = 0
     s1_data["train_semantic_path"] = str(opt_dir / "6-name2semantic.tsv")
     s1_data["train_phoneme_path"] = str(opt_dir / "2-name2text.txt")
     s1_data["output_dir"] = str(opt_dir / f"logs_s1_{SOVITS_VERSION}")
