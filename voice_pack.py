@@ -16,12 +16,12 @@ def _latest(glob_pattern: str, directory: Path) -> Path | None:
     return files[0] if files else None
 
 
-def pack_finetune_15(
+def pack_voice_pack(
     *,
-    pack_id: str = "finetune_15",
-    voice_name: str = "15样本训练",
-    gpt_glob: str = "user3_15-e*.ckpt",
-    sovits_glob: str = "user3_15_e*.pth",
+    pack_id: str,
+    voice_name: str,
+    gpt_glob: str,
+    sovits_glob: str,
     ref_audio: Path | None = None,
     prompt_text: str | None = None,
     out_dir: Path | None = None,
@@ -31,32 +31,28 @@ def pack_finetune_15(
     gpt_src = _latest(gpt_glob, gpt_dir)
     sovits_src = _latest(sovits_glob, sovits_dir)
     if not gpt_src or not sovits_src:
-        raise FileNotFoundError("未找到 user3_15 权重，请先完成 15 样本微调训练。")
-    ref_src = ref_audio or Path(BASE_DIR) / "data" / "voices" / "3" / "15" / "reference.wav"
-    if not ref_src.is_file():
-        raise FileNotFoundError(f"参考音频不存在: {ref_src}")
-    if not prompt_text:
-        prompt_text = (
-            "今天天气真的不错，阳光洒在脸上暖洋洋的，我们下午一起去公园走走，"
-            "顺便呼吸一下新鲜空气吧。"
+        raise FileNotFoundError(
+            f"未找到匹配权重（gpt={gpt_glob}, sovits={sovits_glob}），请先完成微调训练。"
         )
+    if not ref_audio or not ref_audio.is_file():
+        raise FileNotFoundError(f"参考音频不存在: {ref_audio}")
 
     install_gpt_rel = f"engines/GPT-SoVITS/GPT_weights_v2/{gpt_src.name}"
     install_sovits_rel = f"engines/GPT-SoVITS/SoVITS_weights_v2/{sovits_src.name}"
-    install_ref_rel = "data/voice_packs/finetune_15/reference.wav"
+    install_ref_rel = f"data/voice_packs/{pack_id}/reference.wav"
 
     target = out_dir or Path(BASE_DIR) / "deploy" / "voice_packs" / pack_id
     target.mkdir(parents=True, exist_ok=True)
 
     shutil.copy2(gpt_src, target / "gpt.ckpt")
     shutil.copy2(sovits_src, target / "sovits.pth")
-    shutil.copy2(ref_src, target / "reference.wav")
+    shutil.copy2(ref_audio, target / "reference.wav")
 
     meta = {
         "pack_id": pack_id,
         "voice_name": voice_name,
         "mode": "finetuned",
-        "prompt_text": prompt_text,
+        "prompt_text": prompt_text or "",
         "files": {
             "gpt": "gpt.ckpt",
             "sovits": "sovits.pth",
@@ -70,6 +66,60 @@ def pack_finetune_15(
     }
     (target / "pack.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     return target
+
+
+def pack_finetune_15(
+    *,
+    pack_id: str = "finetune_15",
+    voice_name: str = "15样本训练",
+    gpt_glob: str = "user3_15-e*.ckpt",
+    sovits_glob: str = "user3_15_e*.pth",
+    ref_audio: Path | None = None,
+    prompt_text: str | None = None,
+    out_dir: Path | None = None,
+) -> Path:
+    ref_src = ref_audio or Path(BASE_DIR) / "data" / "voices" / "3" / "15" / "reference.wav"
+    if not prompt_text:
+        prompt_text = (
+            "今天天气真的不错，阳光洒在脸上暖洋洋的，我们下午一起去公园走走，"
+            "顺便呼吸一下新鲜空气吧。"
+        )
+    return pack_voice_pack(
+        pack_id=pack_id,
+        voice_name=voice_name,
+        gpt_glob=gpt_glob,
+        sovits_glob=sovits_glob,
+        ref_audio=ref_src,
+        prompt_text=prompt_text,
+        out_dir=out_dir,
+    )
+
+
+def pack_finetune_4(
+    *,
+    pack_id: str = "finetune_4",
+    voice_name: str = "4样本训练",
+    gpt_glob: str = "user3_4____004-e*.ckpt",
+    sovits_glob: str = "user3_4____004_e*.pth",
+    ref_audio: Path | None = None,
+    prompt_text: str | None = None,
+    out_dir: Path | None = None,
+) -> Path:
+    ref_src = ref_audio or Path(BASE_DIR) / "data" / "voices" / "3" / "4____004" / "reference.wav"
+    if not prompt_text:
+        prompt_text = (
+            "清晨的阳光透过玻璃窗，轻轻洒在桌面的纸张上。窗外的街道渐渐热闹起来，"
+            "行人步履匆匆，车辆有序驶过，城市在细碎的声响中慢慢苏醒。"
+        )
+    return pack_voice_pack(
+        pack_id=pack_id,
+        voice_name=voice_name,
+        gpt_glob=gpt_glob,
+        sovits_glob=sovits_glob,
+        ref_audio=ref_src,
+        prompt_text=prompt_text,
+        out_dir=out_dir,
+    )
 
 
 def _install_pack_files(root: Path, meta: dict) -> dict[str, str]:
