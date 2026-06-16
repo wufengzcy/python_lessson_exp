@@ -10,6 +10,8 @@ from config import BASE_DIR
 _MARKERS = (
     "engines/GPT-SoVITS/",
     "engines\\GPT-SoVITS\\",
+    "data/voice_packs/",
+    "data\\voice_packs\\",
     "data/voices/",
     "data\\voices\\",
     "data/",

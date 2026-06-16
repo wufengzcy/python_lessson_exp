@@ -16,16 +16,19 @@ python scripts/pack_finetune_15.py
 
 先按 INSTALL.md 装好环境和 GPT-SoVITS，再把收到的 `finetune_15` 文件夹放到：
 
-`voice_assistant/deploy/voice_packs/finetune_15/`
+`deploy/voice_packs/finetune_15/`（项目根目录下，不是 voice_assistant 子目录）
 
 然后执行：
 
 ```powershell
-cd voice_assistant
+cd python_lessson_exp
 .\.venv\Scripts\Activate.ps1
 python scripts/import_voice_pack.py deploy/voice_packs/finetune_15
+python scripts/verify_voice_deploy.py
 ```
 
-打开 main.py → 引擎选 **GPT-SoVITS 克隆** → 声线 **15样本训练**。
+打开 main.py → 引擎选 **GPT-SoVITS 克隆** → 声线 **15样本训练 (finetuned)**。
 
-无需改 app.db、无需替换路径。
+默认会给数据库里所有用户都注册该声线；仅导入 admin 时用 `--user admin`。
+
+无需改 app.db、无需手动选择 .ckpt 文件。
