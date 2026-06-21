@@ -2,13 +2,14 @@
 
 import db
 from ui.login_window import LoginWindow
-from ui.main_window import MainWindow
 
 
 def main():
     db.init_db()
 
     def on_login_success(user):
+        from ui.main_window import MainWindow
+
         app = MainWindow(user)
         app.mainloop()
 

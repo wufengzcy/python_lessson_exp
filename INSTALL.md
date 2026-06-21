@@ -16,8 +16,9 @@
 6. [下载 ChatTTS 模型（必做）](#6-下载-chattts-模型必做)
 7. [验证安装](#7-验证安装)
 8. [启动程序](#8-启动程序)
-9. [常见问题](#9-常见问题)
-10. [附录：路径对照表](#10-附录路径对照表)
+9. [GPT-SoVITS 声线克隆（可选）](#9-gpt-sovits-声线克隆可选)
+10. [常见问题](#10-常见问题)
+11. [附录：路径对照表](#11-附录路径对照表)
 
 ---
 
@@ -311,7 +312,40 @@ python main.py
 
 ---
 
-## 9. 常见问题
+## 9. GPT-SoVITS 声线克隆（可选）
+
+项目已集成 [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) 源码（`engines/GPT-SoVITS`），通过 **本地 Python import / subprocess 调训练脚本** 实现，**不依赖 HTTP API**。
+
+### 9.1 安装 GPT-SoVITS 引擎
+
+在已完成 ChatTTS 环境的基础上：
+
+```powershell
+cd <项目目录>
+.\.venv\Scripts\Activate.ps1
+powershell -ExecutionPolicy Bypass -File .\setup_sovits.ps1
+```
+
+脚本会 clone 仓库并下载 v2 预训练底模（数 GB，需较长时间）。
+
+额外依赖（若缺失）：
+
+```powershell
+pip install pyyaml peft librosa
+```
+
+### 9.2 使用流程
+
+1. 启动 `python main.py` 并登录  
+2. 点击 **「我的声线」**  
+3. 导入参考 WAV（3～60 秒干净人声）+ 填写参考文本  
+4. **零样本**：点「保存为零样本声线」（用底模 + 参考音频克隆，最快）  
+5. **微调**：点「开始微调训练」（调用 GPT-SoVITS 自带训练脚本）  
+6. 回到主界面，引擎选 **「GPT-SoVITS 克隆」**，选择声线后合成  
+
+---
+
+## 10. 常见问题
 
 ### Q1：`ModuleNotFoundError: pybase16384.backends.cython._core`
 
@@ -339,24 +373,42 @@ py -3.12 -m venv .venv
 **原因**：新版 torchaudio 保存方式变更。  
 **解决**：本项目已用 `soundfile` 保存，请 `pip install soundfile`；不要单独改回 `torchaudio.save`。
 
-### Q5：文本里有换行，合成异常或漏读
+### Q5：ChatTTS 合成失败 `'DynamicCache' object has no attribute 'layers'`
+
+**原因**：安装 GPT-SoVITS 时把 `transformers` 升到了与 ChatTTS 不兼容的版本（ChatTTS 0.2.5 与 transformers 5.x 或部分 4.4x 不兼容）。  
+**解决**：在项目根目录执行：
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python scripts/fix_chattts_transformers.py
+```
+
+或手动：
+
+```powershell
+pip install "transformers>=4.46,<=4.50"
+```
+
+然后**关闭并重启** `main.py`，再试 ChatTTS 合成。
+
+### Q6：文本里有换行，合成异常或漏读
 
 **原因**：ChatTTS 不支持换行符。  
 **解决**：输入框中避免多行；程序内部会自动将换行替换为空格。
 
-### Q6：`pip` 报 `Cache entry deserialization failed`
+### Q7：`pip` 报 `Cache entry deserialization failed`
 
 **原因**：pip 缓存损坏。  
 **解决**：可忽略（不影响安装）；或删除 `$env:PIP_CACHE_DIR` 对应目录后重试。
 
-### Q7：RTX 5060 提示 sm_120 不兼容
+### Q8：RTX 5060 提示 sm_120 不兼容
 
 **原因**：PyTorch 版本与显卡架构不匹配。  
 **解决**：安装 **cu130** 版 PyTorch（见 5.3 节），并更新 NVIDIA 驱动到最新。
 
 ---
 
-## 10. 附录：路径对照表
+## 11. 附录：路径对照表
 
 以下为组内参考配置（可按自己电脑修改）：
 
@@ -368,6 +420,8 @@ py -3.12 -m venv .venv
 | pip 缓存 | `E:\python_cache\pip` |
 | HuggingFace 缓存 | `E:\python_cache\huggingface` |
 | ChatTTS 模型 | `<项目目录>\asset\` |
+| GPT-SoVITS 源码 | `<项目目录>\engines\GPT-SoVITS\` |
+| 用户声线样本 | `<项目目录>\data\voices\` |
 | 合成输出 | `<项目目录>\data\outputs\` |
 | 本地数据库 | `<项目目录>\data\app.db` |
 

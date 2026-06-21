@@ -61,4 +61,26 @@ CREATE INDEX IF NOT EXISTS idx_transcriptions_text ON transcriptions(text);
 CREATE INDEX IF NOT EXISTS idx_command_logs_user_id ON command_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_operation_logs_created_at ON operation_logs(created_at);
 
+-- 用户自定义声线（GPT-SoVITS 零样本 / 微调）
+CREATE TABLE IF NOT EXISTS voice_profiles (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id             INTEGER NOT NULL,
+    name                TEXT    NOT NULL,
+    engine              TEXT    NOT NULL DEFAULT 'gpt-sovits',
+    mode                TEXT    NOT NULL DEFAULT 'zero_shot'
+                        CHECK (mode IN ('zero_shot', 'finetuned')),
+    ref_audio_path      TEXT    NOT NULL,
+    prompt_text         TEXT    NOT NULL,
+    gpt_weights_path    TEXT,
+    sovits_weights_path TEXT,
+    exp_name            TEXT,
+    status              TEXT    NOT NULL DEFAULT 'ready'
+                        CHECK (status IN ('pending', 'training', 'ready', 'failed')),
+    error_message       TEXT,
+    created_at          TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_voice_profiles_user_id ON voice_profiles(user_id);
+
 -- 默认管理员由 db.py 在 init_db() 中创建（密码需在代码里哈希后插入）

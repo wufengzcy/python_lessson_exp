@@ -8,13 +8,33 @@ venv/
 # ChatTTS models (download locally, ~1GB)
 asset/
 
-# Runtime data
-data/
+# Runtime data (keep train_batches manifests only)
+data/*
+!data/train_batches/
+!data/train_batches/**/
+!data/train_batches/**/*.tsv
+!data/train_batches/**/*.txt
+data/train_batches/**/*.m4a
+data/train_batches/**/*.wav
+data/train_batches/**/*.mp3
+data/train_batches/**/*.flac
 logs/
 *.db
 
 # Generated audio
 *.wav
+
+# GPT-SoVITS engine (clone locally, large)
+engines/GPT-SoVITS/
+
+# Voice pack binaries (share offline, do not commit)
+deploy/voice_packs/**/*
+!deploy/voice_packs/**/README.txt
+!deploy/voice_packs/**/pack.json
+data/voice_packs/**/*.wav
+
+# Large zip archives
+*.zip
 
 # IDE / OS
 .vscode/

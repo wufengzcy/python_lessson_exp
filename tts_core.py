@@ -9,12 +9,33 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-import ChatTTS
-
 from config import ASSET_DIR, TTS_SAMPLE_RATE
 
 _lock = threading.Lock()
-_engine: ChatTTS.Chat | None = None
+_engine = None
+
+
+def _ensure_transformers_compat() -> None:
+    """ChatTTS 0.2.5 访问 past_key_values.layers；部分 transformers 只有 key_cache。"""
+    try:
+        from transformers.cache_utils import DynamicCache
+    except ImportError:
+        return
+
+    if getattr(DynamicCache, "_chattts_compat_patched", False):
+        return
+
+    if not hasattr(DynamicCache, "layers"):
+
+        @property
+        def _layers_compat(self):
+            if hasattr(self, "key_cache"):
+                return self.key_cache
+            return []
+
+        DynamicCache.layers = _layers_compat  # type: ignore[attr-defined]
+
+    DynamicCache._chattts_compat_patched = True  # type: ignore[attr-defined]
 
 
 def normalize_text(text: str) -> str:
@@ -22,7 +43,10 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def get_engine() -> ChatTTS.Chat:
+def get_engine():
+    _ensure_transformers_compat()
+    import ChatTTS
+
     global _engine
     with _lock:
         if _engine is not None:

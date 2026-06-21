@@ -11,8 +11,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import db
-import tts_core
-from config import OUTPUT_DIR, TTS_MODEL_NAME
+from config import OUTPUT_DIR, TTS_ENGINE_CHAT, TTS_ENGINE_SOVITS, TTS_MODEL_NAME
 from ui.theme import COLORS, FONTS, apply_theme, center_window, make_card
 
 
@@ -25,6 +24,7 @@ class MainWindow(tk.Tk):
         self.is_synthesizing = False
         self.current_wav_path: str | None = None
         self.current_record_id: int | None = None
+        self.voice_profile_map: dict[str, int] = {}
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -54,7 +54,7 @@ class MainWindow(tk.Tk):
         )
         ttk.Label(
             left,
-            text="ChatTTS · 文本转语音",
+            text="ChatTTS · GPT-SoVITS 双引擎",
             font=FONTS["subtitle"],
             foreground=COLORS["muted"],
             background=COLORS["header"],
@@ -73,6 +73,9 @@ class MainWindow(tk.Tk):
             ttk.Button(right, text="管理", style="Secondary.TButton", command=self._open_admin).pack(
                 side=tk.RIGHT, padx=4
             )
+        ttk.Button(right, text="我的声线", style="Secondary.TButton", command=self._open_voice_clone).pack(
+            side=tk.RIGHT, padx=4
+        )
         ttk.Button(right, text="退出", style="Secondary.TButton", command=self._on_close).pack(
             side=tk.RIGHT, padx=4
         )
@@ -86,6 +89,31 @@ class MainWindow(tk.Tk):
 
         card = make_card(body, padding=16)
         card.pack(fill=tk.BOTH, expand=True)
+
+        engine_row = ttk.Frame(card, style="Card.TFrame")
+        engine_row.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(engine_row, text="合成引擎", style="Card.TLabel").pack(side=tk.LEFT)
+        self.engine_var = tk.StringVar(value="ChatTTS 默认")
+        self.combo_engine = ttk.Combobox(
+            engine_row,
+            textvariable=self.engine_var,
+            values=["ChatTTS 默认", "GPT-SoVITS 克隆"],
+            state="readonly",
+            width=18,
+        )
+        self.combo_engine.pack(side=tk.LEFT, padx=(8, 16))
+        self.combo_engine.bind("<<ComboboxSelected>>", self._on_engine_changed)
+
+        ttk.Label(engine_row, text="声线", style="Card.TLabel").pack(side=tk.LEFT)
+        self.voice_var = tk.StringVar(value="（请先创建声线）")
+        self.combo_voice = ttk.Combobox(
+            engine_row,
+            textvariable=self.voice_var,
+            state="disabled",
+            width=24,
+        )
+        self.combo_voice.pack(side=tk.LEFT, padx=(8, 0))
+        self._refresh_voice_profiles()
 
         top = ttk.Frame(card, style="Card.TFrame")
         top.pack(fill=tk.X, pady=(0, 10))
@@ -148,6 +176,44 @@ class MainWindow(tk.Tk):
 
         self.progress = ttk.Progressbar(card, mode="indeterminate", length=200)
         self.progress.pack(fill=tk.X, pady=(12, 0))
+
+    def _on_engine_changed(self, _event=None):
+        if self.engine_var.get().startswith("GPT"):
+            self.combo_voice.config(state="readonly")
+        else:
+            self.combo_voice.config(state="disabled")
+
+    def _refresh_voice_profiles(self):
+        self.voice_profile_map.clear()
+        names: list[str] = []
+        for p in db.list_voice_profiles_by_user(self.current_user["id"], ready_only=True):
+            label = f"{p['name']} ({p['mode']})"
+            names.append(label)
+            self.voice_profile_map[label] = p["id"]
+        self.combo_voice["values"] = names or ["（暂无可用声线）"]
+        if names:
+            self.voice_var.set(names[0])
+        else:
+            self.voice_var.set("（暂无可用声线）")
+
+    def _get_selected_engine(self) -> str:
+        if self.engine_var.get().startswith("GPT"):
+            return TTS_ENGINE_SOVITS
+        return TTS_ENGINE_CHAT
+
+    def _get_selected_voice_profile(self) -> dict | None:
+        pid = self.voice_profile_map.get(self.voice_var.get())
+        if pid is None:
+            return None
+        from path_utils import resolve_voice_profile
+
+        profile = db.get_voice_profile(pid)
+        return resolve_voice_profile(profile) if profile else None
+
+    def _open_voice_clone(self):
+        from ui.voice_clone_window import VoiceCloneWindow
+
+        VoiceCloneWindow(self, self.current_user, on_changed=self._refresh_voice_profiles)
 
     def _build_history_area(self):
         frame = ttk.LabelFrame(self, text="  合成历史  ", style="Card.TLabelframe", padding=12)
@@ -212,6 +278,8 @@ class MainWindow(tk.Tk):
         self._update_char_count()
 
     def _start_synthesize(self):
+        import tts_core
+
         if self.is_synthesizing:
             return
         raw_text = self.text_input.get("1.0", tk.END).strip()
@@ -222,7 +290,18 @@ class MainWindow(tk.Tk):
 
         self.is_synthesizing = True
         self.progress.start(12)
-        self._set_status("正在合成，首次运行需加载模型…")
+        engine = self._get_selected_engine()
+        profile = self._get_selected_voice_profile() if engine == TTS_ENGINE_SOVITS else None
+        if engine == TTS_ENGINE_SOVITS:
+            if profile is None:
+                self.is_synthesizing = False
+                messagebox.showwarning("提示", "请先在「我的声线」中创建可用声线", parent=self)
+                return
+            self._set_status("GPT-SoVITS 合成中，首次加载较慢…")
+            model_name = f"GPT-SoVITS:{profile['name']}"
+        else:
+            self._set_status("正在合成，首次运行需加载模型…")
+            model_name = TTS_MODEL_NAME
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = os.path.join(
@@ -231,23 +310,41 @@ class MainWindow(tk.Tk):
         record_id = db.create_transcription(
             self.current_user["id"],
             audio_path=output_path,
-            model_name=TTS_MODEL_NAME,
+            model_name=model_name,
             language="zh",
             status="processing",
         )
 
         def worker():
+            import sovits_core
+            import tts_core
+
             try:
-                wav, duration = tts_core.synthesize(text)
-                tts_core.save_wav(wav, output_path)
+                if engine == TTS_ENGINE_SOVITS:
+                    assert profile is not None
+                    wav, sr = sovits_core.synthesize(
+                        text,
+                        profile["ref_audio_path"],
+                        profile["prompt_text"],
+                        gpt_weights=profile.get("gpt_weights_path"),
+                        sovits_weights=profile.get("sovits_weights_path"),
+                    )
+                    import soundfile as sf
+
+                    sf.write(output_path, wav, sr)
+                    duration = len(wav) / sr
+                else:
+                    wav, duration = tts_core.synthesize(text)
+                    tts_core.save_wav(wav, output_path)
                 db.update_transcription_result(record_id, text, duration, "done")
                 self.after(
                     0,
                     lambda: self._on_synthesize_done(text, output_path, record_id, duration),
                 )
             except Exception as e:
-                db.update_transcription_result(record_id, text, 0, "failed", str(e))
-                self.after(0, lambda: self._on_synthesize_error(str(e)))
+                err_msg = str(e)
+                db.update_transcription_result(record_id, text, 0, "failed", err_msg)
+                self.after(0, lambda msg=err_msg: self._on_synthesize_error(msg))
             finally:
                 self.after(0, self._finish_synthesize_ui)
 

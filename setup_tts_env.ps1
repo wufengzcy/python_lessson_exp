@@ -53,7 +53,7 @@ Write-Host "Installing PyTorch cu130 ..."
 & ".\.venv\Scripts\pip.exe" install torch torchaudio --index-url https://download.pytorch.org/whl/cu130
 
 Write-Host "Installing ChatTTS ..."
-& ".\.venv\Scripts\pip.exe" install ChatTTS numpy soundfile huggingface_hub requests
+& ".\.venv\Scripts\pip.exe" install ChatTTS numpy soundfile huggingface_hub requests "transformers>=4.46,<=4.50"
 
 Write-Host "Verify GPU ..."
 & ".\.venv\Scripts\python.exe" -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda, 'ok', torch.cuda.is_available())"

@@ -1,0 +1,126 @@
+智声助手 · 同学完整部署命令（feature-Xiao 分支）
+================================================================
+
+【前提】
+1. 已安装 Python 3.12（不要用 3.13/3.14）
+2. 已从同学处收到文件夹：finetune_15（约 230MB，含 gpt.ckpt / sovits.pth / reference.wav）
+3. 有 NVIDIA 显卡更佳（无显卡也可运行，较慢）
+
+================================================================
+一、获取代码
+================================================================
+
+# 首次克隆（推荐）—— 克隆后项目根目录就是智声助手，没有 voice_assistant 子文件夹
+git clone -b feature-Xiao https://github.com/wufengzcy/python_lessson_exp.git
+cd python_lessson_exp
+
+# 若已有仓库，更新到最新
+cd python_lessson_exp
+git checkout feature-Xiao
+git pull origin feature-Xiao
+
+================================================================
+二、安装 Python 环境 + ChatTTS
+================================================================
+
+powershell -ExecutionPolicy Bypass -File .\setup_tts_env.ps1
+.\.venv\Scripts\Activate.ps1
+
+# 下载 ChatTTS 模型到 asset/（必做，约 2GB，见 INSTALL.md 第 6 节）
+# 国内镜像示例：
+$env:HF_ENDPOINT = "https://hf-mirror.com"
+python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='2Noise/ChatTTS', local_dir='asset')"
+
+================================================================
+三、安装 GPT-SoVITS 引擎 + 预训练模型
+================================================================
+
+powershell -ExecutionPolicy Bypass -File .\setup_sovits.ps1
+
+# 说明：会自动 clone 引擎、下载预训练权重、打 Windows 补丁，需数 GB 空间，耗时较长
+
+================================================================
+四、放置 15 样本声线包（离线拷贝，不在 Git 里）
+================================================================
+
+# 把同学发来的 finetune_15 文件夹放到下面路径（文件夹名必须是 finetune_15）：
+
+python_lessson_exp\deploy\voice_packs\finetune_15\
+
+# 该文件夹内应包含：
+#   pack.json
+#   gpt.ckpt
+#   sovits.pth
+#   reference.wav
+
+================================================================
+五、导入声线包（一条命令，无需改数据库路径）
+================================================================
+
+cd python_lessson_exp
+.\.venv\Scripts\Activate.ps1
+python scripts/import_voice_pack.py deploy/voice_packs/finetune_15
+
+# 成功会列出：已为哪些账号注册声线（默认给所有用户都注册一条）
+
+# 检查是否部署成功（可选）：
+python scripts/verify_voice_deploy.py
+
+================================================================
+六、启动程序
+================================================================
+
+python main.py
+
+# 默认管理员：admin / admin123（若数据库为全新初始化）
+# 若你注册了自己的账号，导入后也会出现在你的账号下（新版 import 默认 --all-users）
+
+================================================================
+七、合成测试
+================================================================
+
+1. 主界面 → 合成引擎 选「GPT-SoVITS 克隆」（必须选这个，否则声线下拉框是灰的）
+2. 声线 选「15样本训练 (finetuned)」
+3. 输入测试文本（不要用训练 manifest 里的原句）
+4. 点击「开始合成」→「播放」
+
+合成文件保存在：
+data\outputs\
+
+================================================================
+常见问题
+================================================================
+
+Q: import 报错找不到 finetune_15？
+A: 检查路径是否为 deploy\voice_packs\finetune_15\，且含 pack.json。
+   注意：是在克隆后的 python_lessson_exp 根目录下，不是 voice_assistant 子目录。
+
+Q: 引擎状态未就绪？
+A: 重新运行 setup_sovits.ps1，确认 engines\GPT-SoVITS 预训练模型已下载完整。
+
+Q: ChatTTS 报错 DynamicCache / layers / seen_tokens？
+A: transformers 版本与 ChatTTS 冲突（装 GPT-SoVITS 后常见）。执行：
+   python scripts/fix_chattts_transformers.py
+   然后重启 main.py。
+
+Q: ChatTTS 报错 asset 或 load False？
+A: 确认 asset\ 目录已下载模型（见第二节）。
+
+Q: 合成没有「15样本训练」声线？（最常见）
+A: 按顺序排查：
+   1) 运行 python scripts/verify_voice_deploy.py 看文件和数据库是否正常
+   2) 确认已执行第五节 import，然后关闭并重新打开 main.py
+   3) 合成引擎必须选「GPT-SoVITS 克隆」（ChatTTS 模式下声线不可用）
+   4) 旧版 import 只给 admin 注册；请更新代码后重新 import，或直接用 admin 登录
+   5) 「我的声线」窗口里能看到、主界面下拉没有 → 重启 main.py
+
+Q: 模型文件在哪？需要手动选 .ckpt 吗？
+A: 不需要。import 会把权重复制到 engines\GPT-SoVITS\ 并在数据库注册，
+   主界面声线下拉框里选「15样本训练」即可，不是文件浏览器。
+
+================================================================
+仓库地址
+================================================================
+
+https://github.com/wufengzcy/python_lessson_exp.git
+分支：feature-Xiao
