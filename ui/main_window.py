@@ -180,8 +180,10 @@ class MainWindow(tk.Tk):
     def _on_engine_changed(self, _event=None):
         if self.engine_var.get().startswith("GPT"):
             self.combo_voice.config(state="readonly")
+            self._refresh_voice_profiles()
         else:
             self.combo_voice.config(state="disabled")
+            self.voice_var.set("")
 
     def _refresh_voice_profiles(self):
         self.voice_profile_map.clear()
@@ -191,10 +193,17 @@ class MainWindow(tk.Tk):
             names.append(label)
             self.voice_profile_map[label] = p["id"]
         self.combo_voice["values"] = names or ["（暂无可用声线）"]
-        if names:
-            self.voice_var.set(names[0])
+        if self._get_selected_engine() == TTS_ENGINE_SOVITS:
+            if names:
+                current = self.voice_var.get()
+                if current in self.voice_profile_map:
+                    self.voice_var.set(current)
+                else:
+                    self.voice_var.set(names[0])
+            else:
+                self.voice_var.set("（暂无可用声线）")
         else:
-            self.voice_var.set("（暂无可用声线）")
+            self.voice_var.set("")
 
     def _get_selected_engine(self) -> str:
         if self.engine_var.get().startswith("GPT"):
